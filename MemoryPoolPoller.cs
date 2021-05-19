@@ -43,14 +43,21 @@ namespace MoneroTransactionSniffer
         {
             while (true)
             {
-                await Task.Delay(TimeSpan.FromSeconds(1), token).ConfigureAwait(false);
-                var memoryPool = await _moneroDaemonClient.GetTransactionPoolAsync(token).ConfigureAwait(false);
-                var newTransactionsAdded = _memoryPoolStash.AcceptSnapshot(new MemoryPoolSnapshot()
+                try
                 {
-                    Transactions = memoryPool.Transactions.Select(x => new MemoryPoolTransaction(x.TxHash, x.IsDoubleSpendSeen, x.TxJson)).ToList(),
-                });
-                lock (_lock)
-                    _newTransactions.Enqueue(newTransactionsAdded);
+                    await Task.Delay(TimeSpan.FromSeconds(1), token).ConfigureAwait(false);
+                    var memoryPool = await _moneroDaemonClient.GetTransactionPoolAsync(token).ConfigureAwait(false);
+                    var newTransactionsAdded = _memoryPoolStash.AcceptSnapshot(new MemoryPoolSnapshot()
+                    {
+                        Transactions = memoryPool.Transactions.Select(x => new MemoryPoolTransaction(x.TxHash, x.IsDoubleSpendSeen, x.TxJson)).ToList(),
+                    });
+                    lock (_lock)
+                        _newTransactions.Enqueue(newTransactionsAdded);
+                }
+                catch (Exception e)
+                {
+                    Console.WriteLine(e);
+                }
             }
         }
 
