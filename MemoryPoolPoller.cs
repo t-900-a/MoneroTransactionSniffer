@@ -43,7 +43,7 @@ namespace MoneroTransactionSniffer
         {
             while (true)
             {
-                await Task.Delay(TimeSpan.FromMilliseconds(100), token).ConfigureAwait(false);
+                await Task.Delay(TimeSpan.FromSeconds(1), token).ConfigureAwait(false);
                 var memoryPool = await _moneroDaemonClient.GetTransactionPoolAsync(token).ConfigureAwait(false);
                 var newTransactionsAdded = _memoryPoolStash.AcceptSnapshot(new MemoryPoolSnapshot()
                 {
