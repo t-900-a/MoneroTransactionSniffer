@@ -37,6 +37,7 @@ namespace MoneroTransactionSniffer
         public bool UnlockTimeViolation { get; set; } = false;
         public bool FeeViolation { get; set; } = false;
         public bool IsDoubleSpend { get; set; } = false;
+        public bool NonDefaultExtraField { get; set; } = false;
     }
 
     class MoneroTransactionIdentifier
@@ -83,6 +84,11 @@ namespace MoneroTransactionSniffer
             {
                 vd.FeeViolation = true;
             }
+            int bitCpunt = json.Extra.Count * 8;
+            if (bitCpunt >= 500)
+            {
+                vd.NonDefaultExtraField = true;
+            }
             return vd;
         }
 
@@ -95,12 +101,14 @@ namespace MoneroTransactionSniffer
                 score += SuspicionScore.DoubleSpend;
             if (vd.UnlockTimeViolation)
                 score += SuspicionScore.UnlockTime;
+            if (vd.NonDefaultExtraField)
+                score += SuspicionScore.PaymentID;
             return score;
         }
 
         public static bool IsSuspicious(SuspicionDegree suspicionDegree)
         {
-            return suspicionDegree >= SuspicionDegree.Medium;
+            return suspicionDegree > SuspicionDegree.Indeterminate;
         }
 
         public static string GenerateMessage(SuspicionData susInfo)
@@ -112,24 +120,34 @@ namespace MoneroTransactionSniffer
             if (susInfo.ViolationData.IsDoubleSpend)
                 sb.AppendLine($"Double Spend Found!");
             if (susInfo.ViolationData.UnlockTimeViolation)
-                sb.AppendLine($"Unlock Time is greater than 0! ({susInfo.UnlockTime} blocks)");
+            {
+                sb.AppendLine($"Unlock Time is greater than 0! (unlock_time = {susInfo.UnlockTime})");
+                if (susInfo.UnlockTime < 1_000_000)
+                    sb.AppendLine($"You also misused this field! unlock_time is absolute block height, not relative block height!");
+            }
             if (susInfo.ViolationData.FeeViolation)
-                sb.AppendLine($"Very large fee! ({((double)susInfo.Fee) / 1_000_000_000_000.0:N12} XMR)");
+                sb.AppendLine($"Very large fee! ({MoneroDenominationConverter.PiconeroToMonero(susInfo.Fee):N12} XMR)");
+            if (susInfo.ViolationData.NonDefaultExtraField)
+                sb.AppendLine($"This transactions 'extra' field is packed. Either you're using a PaymentID, or including other information in this field.");
+            sb.AppendLine();
+            sb.AppendLine($"#monero #privacy");
             return sb.ToString();
         }
     }
 
     class SuspicionScore
     {
-        public static readonly uint DoubleSpend = 5;
-        public static readonly uint UnlockTime = 5;
-        public static readonly uint Fee = 5;
+        public static readonly uint DoubleSpend = 10;
+        public static readonly uint UnlockTime = 8;
+        public static readonly uint PaymentID = 5;
+        public static readonly uint Fee = 3;
     }
 
     class SuspicionThresholds
     {
         public static readonly uint UnlockTime = 1;
         public static readonly ulong Fee = 10_000_000_000;
+        public static readonly string DefaultPaymentID = "";
     }
 
     class SuspicionDegreeCalculator

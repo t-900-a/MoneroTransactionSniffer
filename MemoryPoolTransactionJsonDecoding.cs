@@ -13,5 +13,7 @@ namespace MoneroTransactionSniffer
         public ulong UnlockTime { get; set; }
         [JsonPropertyName("rct_signatures")]
         public RingSignature RingSignature { get; set; }
+        [JsonPropertyName("extra")]
+        public List<byte> Extra { get; set; } = new List<byte>();
     }
 }

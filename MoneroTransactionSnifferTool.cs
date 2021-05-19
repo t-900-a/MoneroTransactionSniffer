@@ -65,15 +65,22 @@ namespace MoneroTransactionSniffer
         {
             while (true)
             {
-                await Task.Delay(TimeSpan.FromMilliseconds(1), token).ConfigureAwait(false);
+                await Task.Delay(TimeSpan.FromMilliseconds(1000), token).ConfigureAwait(false);
                 var newTransactions = _memoryPoolPoller.GetNewTransactions();
                 newTransactions.ForEach(async t =>
                 {
-                    var (isSuspicious, susInfo) = MoneroTransactionIdentifier.GetSuspicionData(t);
-                    if (isSuspicious)
+                    try
                     {
-                        var message = MoneroTransactionIdentifier.GenerateMessage(susInfo);
-                        await _twitterPoster.PostAsync(message).ConfigureAwait(false);
+                        var (isSuspicious, susInfo) = MoneroTransactionIdentifier.GetSuspicionData(t);
+                        if (isSuspicious)
+                        {
+                            var message = MoneroTransactionIdentifier.GenerateMessage(susInfo);
+                            await _twitterPoster.PostAsync(message).ConfigureAwait(false);
+                        }
+                    }
+                    catch (Exception e)
+                    {
+                        Console.WriteLine(e);
                     }
                 });
             }
