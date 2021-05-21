@@ -43,7 +43,6 @@ namespace MoneroTransactionSniffer
         {
             try
             {
-                Console.WriteLine($"Posted! \n{message}");
                 await _twitterClient.Tweets.PublishTweetAsync(message).ConfigureAwait(false);
             }
             catch (Exception e)
