@@ -13,28 +13,19 @@ namespace MoneroTransactionSniffer
         Task PostAsync(string message);
     }
 
-    class TwitterPosterConfiguration
-    {
-        public string ApiKey { get; set; }
-        public string ApiSecret { get; set; }
-        public string BearerToken { get; set; }
-        public string ConsumerToken { get; set; }
-        public string ConsumerTokenSecret { get; set; }
-    }
-
     class TwitterPoster : ITwitterPoster
     {
 
-        public TwitterPoster(TwitterPosterConfiguration twitterPosterConfiguration)
+        public TwitterPoster(TwitterApiCredentials twitterCredentials)
         {
             // Initialize
             var appCredentials = new TwitterCredentials()
             {
-                ConsumerKey = twitterPosterConfiguration.ApiKey,
-                ConsumerSecret = twitterPosterConfiguration.ApiSecret,
-                AccessTokenSecret = twitterPosterConfiguration.ConsumerTokenSecret,
-                AccessToken = twitterPosterConfiguration.ConsumerToken,
-                BearerToken = twitterPosterConfiguration.BearerToken,
+                ConsumerKey = twitterCredentials.ApiKey,
+                ConsumerSecret = twitterCredentials.ApiSecret,
+                AccessTokenSecret = twitterCredentials.ConsumerSecret,
+                AccessToken = twitterCredentials.ConsumerKey,
+                BearerToken = twitterCredentials.BearerToken,
             };
             _twitterClient = new TwitterClient(appCredentials);
             _connected = true;

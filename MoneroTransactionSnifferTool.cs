@@ -1,5 +1,9 @@
-﻿using Monero.Client.Daemon;
+﻿using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using Monero.Client.Daemon;
 using Monero.Client.Network;
+using MoneroTransactionSniffer.Records;
 using System;
 using System.Collections.Generic;
 using System.Configuration;
@@ -11,82 +15,66 @@ using System.Threading.Tasks;
 namespace MoneroTransactionSniffer
 {
 
-    class MoneroTransactionSnifferConfiguration
-    {
-        public MoneroTransactionSnifferConfiguration()
-        {
-            // TODO: Use Microsoft's dependency injection framework
-            var nvc = ConfigurationManager.AppSettings;
-            Uri = nvc["Hostname"];
-            Port = Convert.ToUInt32(nvc["Port"]);
-            TwitterPosterConfiguration = new TwitterPosterConfiguration()
-            {
-                ApiSecret = nvc["ApiSecret"],
-                ApiKey = nvc["ApiKey"],
-                BearerToken = nvc["BearerToken"],
-                ConsumerToken = nvc["ConsumerToken"],
-                ConsumerTokenSecret = nvc["ConsumerTokenSecret"],
-            };
-        }
-
-        public string Uri { get; set; }
-        public uint Port { get; set; }
-        public TwitterPosterConfiguration TwitterPosterConfiguration { get; set; }
-    }
-
-    interface IMoneroTransactionSniffer
+    interface IMoneroTransactionSniffer : IAsyncInitialization
     {
         Task RunAsync(CancellationToken token);
     }
 
-    class MoneroTransactionSnifferTool : IMoneroTransactionSniffer
+    class MoneroTransactionSnifferTool : BackgroundService, IMoneroTransactionSniffer
     {
-        private MoneroTransactionSnifferTool(MoneroTransactionSnifferConfiguration moneroSnifferConfiguration)
+        public Task Initialization { get; private set; }
+
+        public MoneroTransactionSnifferTool(IOptions<TwitterApiCredentials> twitterCredentials, IOptions<MoneroNodeSettings> moneroNodeSettings, ILogger<MoneroTransactionSnifferTool> logger)
         {
-            _twitterPoster = new TwitterPoster(moneroSnifferConfiguration.TwitterPosterConfiguration);
+            _logger = logger;
+            _twitterPoster = new TwitterPoster(twitterCredentials.Value);
+            Initialization = InitializeAsync(moneroNodeSettings.Value);
         }
 
-        public static Task<MoneroTransactionSnifferTool> CreateAsync(MoneroTransactionSnifferConfiguration moneroTransactionSnifferConfiguration)
-        {
-            var mts = new MoneroTransactionSnifferTool(moneroTransactionSnifferConfiguration);
-            return mts.InitializeAsync(moneroTransactionSnifferConfiguration);
-        }
-
-        private async Task<MoneroTransactionSnifferTool> InitializeAsync(MoneroTransactionSnifferConfiguration moneroSnifferConfiguration)
+        private async Task InitializeAsync(MoneroNodeSettings moneroNodeSettings)
         {
             _memoryPoolPoller = await MemoryPoolPoller.CreateAsync(new MemoryPoolPollerConfiguration()
             {
-                MoneroDaemonClient = await MoneroDaemonClient.CreateAsync(moneroSnifferConfiguration.Uri, moneroSnifferConfiguration.Port).ConfigureAwait(false),
+                MoneroDaemonClient = await MoneroDaemonClient.CreateAsync(moneroNodeSettings.Host, moneroNodeSettings.Port).ConfigureAwait(false),
             });
-            return this;
+            return;
         }
 
-        public async Task RunAsync(CancellationToken token)
+        public Task RunAsync(CancellationToken token) => ExecuteAsync(token);
+
+        protected override async Task ExecuteAsync(CancellationToken token)
         {
             while (true)
             {
-                await Task.Delay(TimeSpan.FromMilliseconds(1000), token).ConfigureAwait(false);
+                await Task.Delay(TimeSpan.FromSeconds(2), token).ConfigureAwait(false);
                 var newTransactions = _memoryPoolPoller.GetNewTransactions();
                 newTransactions.ForEach(async t =>
                 {
-                    try
-                    {
-                        var (isSuspicious, susInfo) = MoneroTransactionIdentifier.GetSuspicionData(t);
-                        if (isSuspicious)
-                        {
-                            var message = MoneroTransactionIdentifier.GenerateMessage(susInfo);
-                            await _twitterPoster.PostAsync(message).ConfigureAwait(false);
-                        }
-                    }
-                    catch (Exception e)
-                    {
-                        Console.WriteLine(e);
-                    }
+                    await AnalyzeTransaction(t).ConfigureAwait(false);
                 });
+            }
+        }
+
+        private async Task AnalyzeTransaction(MemoryPoolTransaction t)
+        {
+            try
+            {
+                var (isSuspicious, susInfo) = MoneroTransactionIdentifier.GetSuspicionData(t);
+                if (isSuspicious)
+                {
+                    var message = MoneroTransactionIdentifier.GenerateMessage(susInfo);
+                    _logger.LogInformation(message);
+                    await _twitterPoster.PostAsync(message).ConfigureAwait(false);
+                }
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e);
             }
         }
 
         private IMemoryPoolPoller _memoryPoolPoller;
         private readonly ITwitterPoster _twitterPoster;
+        private readonly ILogger<MoneroTransactionSnifferTool> _logger;
     }
 }
