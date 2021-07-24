@@ -4,6 +4,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Tweetinvi;
 using Tweetinvi.Models;
+using System.IO;
 
 namespace MoneroTransactionSniffer
 {
@@ -43,7 +44,8 @@ namespace MoneroTransactionSniffer
         {
             try
             {
-                await _twitterClient.Tweets.PublishTweetAsync(message).ConfigureAwait(false);
+                using StreamWriter file = new("Entries.txt", append: true);
+                await file.WriteLineAsync(message);
             }
             catch (Exception e)
             {
